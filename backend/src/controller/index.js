@@ -3,10 +3,15 @@ import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 import csv from "csv-parser";
 import db from "../model/index.js";
-import { parseSearchIntent } from "../helper/index.js";
+import {
+	buildAggregationPipeline,
+	buildMatchQuery,
+	parseSearchIntent,
+} from "../helper/index.js";
 
 const { Airport } = db;
-
+const searchCache = new Map();
+const MAX_SEARCH_CACHE_SIZE = 2000;
 export const seedAirportDataController = async (req, res) => {
 	try {
 		const __filename = fileURLToPath(import.meta.url);
@@ -126,99 +131,28 @@ export const searchAirportsController = async (req, res) => {
 		if (!query || query.length < 2) {
 			return res.status(200).json({ success: true, intent: null, results: [] });
 		}
-		const intentData = await parseSearchIntent(query);
 
-        console.log("Parsed Intent Data:", intentData);
-		let mongoQuery = {};
-		if (intentData.intent === "iata") {
-			mongoQuery = {
-				$or: [
-					{ iata_code: intentData.normalized_query },
-
-					{
-						municipality: {
-							$regex: `^${intentData.normalized_query}`,
-							$options: "i",
-						},
-					},
-				],
-			};
-		} else if (intentData.intent === "region" && intentData.region_code) {
-			// Handles "Hawaii" -> Returns HNL, OGG, etc.
-			mongoQuery = { iso_region: intentData.region_code };
-		} else {
-			// Direct match or fallback regex match on normalized query text
-			mongoQuery = {
-				$or: [
-					{
-						municipality: {
-							$regex: `^${intentData.normalized_query}$`,
-							$options: "i",
-						},
-					},
-					{ name: { $regex: intentData.normalized_query, $options: "i" } },
-					{ aliases: { $regex: intentData.normalized_query, $options: "i" } },
-				],
-			};
+		//in memory cache check
+		const cacheKey = query.trim().toLowerCase();
+		if (searchCache.has(cacheKey)) {
+			return res.status(200).json(searchCache.get(cacheKey));
 		}
 
-		const results = await Airport.aggregate([
-			{ $match: mongoQuery },
-			{
-				$addFields: {
-					relevanceScore: {
-						$switch: {
-							branches: [
-								// Exact municipality match → highest priority
-								{
-									case: {
-										$regexMatch: {
-											input: "$municipality",
-											regex: `^${intentData.normalized_query}$`,
-											options: "i",
-										},
-									},
-									then: 0,
-								},
-								// Municipality starts with query
-								{
-									case: {
-										$regexMatch: {
-											input: "$municipality",
-											regex: `^${intentData.normalized_query}`,
-											options: "i",
-										},
-									},
-									then: 1,
-								},
-								// Name contains query
-								{
-									case: {
-										$regexMatch: {
-											input: "$name",
-											regex: intentData.normalized_query,
-											options: "i",
-										},
-									},
-									then: 2,
-								},
-							],
-							default: 3,
-						},
-					},
-				},
-			},
-			// Sort: relevance first, then tier (so Patna exact > BBI tier-1)
-			{ $sort: { relevanceScore: 1, tier: 1 } },
-			{ $limit: 10 },
-			{ $project: { __v: 0, createdAt: 0, updatedAt: 0 } },
-		]);
+		const intentData = await parseSearchIntent(query);
 
-		return res.status(200).json({
+		const matchQuery = buildMatchQuery(intentData);
+		const pipeline = buildAggregationPipeline(
+			matchQuery,
+			intentData.normalized_query
+		);
+		const results = await Airport.aggregate(pipeline);
+		const responseData = {
 			success: true,
 			intent: intentData,
-			results: results,
-		});
+			results,
+		};
+		searchCache.set(cacheKey, responseData);
+		return res.status(200).json(responseData);
 	} catch (error) {
 		console.error("Search API Error:", error);
 		return res.status(500).json({

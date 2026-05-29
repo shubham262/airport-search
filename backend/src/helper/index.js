@@ -15,12 +15,18 @@ const SearchIntentSchema = z.object({
 			"If intent is region/state, guess the ISO region code (e.g. Hawaii -> US-HI)"
 		),
 });
-
+const intentCache = new Map();
+const MAX_CACHE_SIZE = 1000;
 export const parseSearchIntent = async (rawQuery) => {
-	const { object } = await generateObject({
-		model: google("gemini-2.5-flash"),
-		schema: SearchIntentSchema,
-		prompt: `
+	try {
+		const cacheKey = rawQuery.trim().toLowerCase();
+		if (intentCache.has(cacheKey)) {
+			return intentCache.get(cacheKey);
+		}
+		const { object } = await generateObject({
+			model: google("gemini-2.5-flash"),
+			schema: SearchIntentSchema,
+			prompt: `
             You are a travel search query parser. 
             Analyze the user's raw input: "${rawQuery}".
             
@@ -31,7 +37,101 @@ export const parseSearchIntent = async (rawQuery) => {
             4. If it's a 3-letter code like "JFK" or "LON", intent is 'iata' and normalized_query is uppercase.
             5. If it's a state/province like "Hawaii" or "Ontario", intent is 'region' and provide the ISO region_code if known.
         `,
-	});
+		});
+		intentCache.set(cacheKey, object);
 
-	return object;
+		if (intentCache.size > MAX_CACHE_SIZE) {
+			const oldestKey = intentCache.keys().next().value;
+			intentCache.delete(oldestKey);
+		}
+		return object;
+	} catch (error) {
+		console.warn("AI Parser failed, using fallback:", error.message);
+
+		return {
+			intent: rawQuery.length === 3 ? "iata" : "unknown",
+			normalized_query: rawQuery,
+		};
+	}
+};
+export const buildMatchQuery = (intentData) => {
+	const { intent, normalized_query, region_code } = intentData;
+
+	switch (intent) {
+		case "iata":
+			return {
+				$or: [
+					{ iata_code: normalized_query },
+					{ municipality: { $regex: `^${normalized_query}`, $options: "i" } },
+				],
+			};
+		case "region":
+			if (region_code) {
+				return { iso_region: region_code };
+			}
+
+			break;
+	}
+
+	return {
+		$or: [
+			{ municipality: { $regex: `^${normalized_query}$`, $options: "i" } },
+			{ name: { $regex: normalized_query, $options: "i" } },
+			{ aliases: { $regex: normalized_query, $options: "i" } },
+		],
+	};
+};
+
+export const buildAggregationPipeline = (matchQuery, normalizedQuery) => {
+	return [
+		{ $match: matchQuery },
+		{
+			$addFields: {
+				relevanceScore: {
+					$switch: {
+						branches: [
+							// 0: Exact municipality match → highest priority
+							{
+								case: {
+									$regexMatch: {
+										input: "$municipality",
+										regex: `^${normalizedQuery}$`,
+										options: "i",
+									},
+								},
+								then: 0,
+							},
+							// 1: Municipality starts with query
+							{
+								case: {
+									$regexMatch: {
+										input: "$municipality",
+										regex: `^${normalizedQuery}`,
+										options: "i",
+									},
+								},
+								then: 1,
+							},
+							// 2: Name contains query
+							{
+								case: {
+									$regexMatch: {
+										input: "$name",
+										regex: normalizedQuery,
+										options: "i",
+									},
+								},
+								then: 2,
+							},
+						],
+						default: 3,
+					},
+				},
+			},
+		},
+
+		{ $sort: { relevanceScore: 1, tier: 1 } },
+		{ $limit: 10 },
+		{ $project: { __v: 0, createdAt: 0, updatedAt: 0 } },
+	];
 };
