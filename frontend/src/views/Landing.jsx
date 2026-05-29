@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/immutability */
 "use client";
 import React, { useState, useEffect } from "react";
-import { Input, Typography, Card, Tag, Spin, Empty, Layout } from "antd";
+import { Input, Typography, Card, Tag, Spin, Empty } from "antd";
 import {
 	FaPlaneDeparture,
 	FaSearch,
@@ -13,7 +13,6 @@ import {
 import { search } from "@/service/search";
 
 const { Title, Text } = Typography;
-const { Content } = Layout;
 
 const Landing = () => {
 	const [info, setInfo] = useState({
@@ -25,33 +24,22 @@ const Landing = () => {
 	});
 
 	useEffect(() => {
-		// const delayDebounceFn = setTimeout(() => {
-		fetchAirports();
-		// }, 500);
-
-		// return () => clearTimeout(delayDebounceFn);
+		const timeout = setTimeout(() => {
+			fetchAirports();
+		}, 800);
+		return () => clearTimeout(timeout);
 	}, [info.query]);
 
 	const fetchAirports = async () => {
-		if (info.query.length < 2) {
-			setInfo((prev) => ({
-				...prev,
-				results: [],
-				intentData: null,
-				error: null,
-			}));
-			return;
-		}
-
 		setInfo((prev) => ({ ...prev, loading: true, error: null }));
 
 		try {
-			const { data } = await search(info.query);
-			console.log("Search API Response:", data);
+			const response = await search(info.query);
+
 			setInfo((prev) => ({
 				...prev,
-				results: data.results || [],
-				intentData: data.intent || null,
+				results: response?.results || [],
+				intentData: response?.intent || null,
 				loading: false,
 			}));
 		} catch (err) {
@@ -67,57 +55,26 @@ const Landing = () => {
 		setInfo((prev) => ({ ...prev, query: e.target.value }));
 	};
 
+	
+
 	return (
-		<Layout style={{ minHeight: "100vh", backgroundColor: "#f8fafc" }}>
-			<Content
-				style={{
-					display: "flex",
-					flexDirection: "column",
-					alignItems: "center",
-					padding: "4rem 1rem",
-					width: "100%",
-				}}
-			>
+		<div className="min-h-screen bg-slate-50">
+			<div className="flex flex-col items-center py-16 px-4 w-full">
 				{/* Header Section */}
-				<div
-					style={{
-						display: "flex",
-						flexDirection: "column",
-						alignItems: "center",
-						marginBottom: "2rem",
-					}}
-				>
-					<div
-						style={{
-							display: "flex",
-							alignItems: "center",
-							gap: "0.75rem",
-							marginBottom: "1rem",
-						}}
-					>
+				<div className="flex flex-col items-center mb-8">
+					<div className="flex items-center gap-3 mb-4">
 						<FaPlaneDeparture size={32} color="#1677ff" />
-						<Title
-							level={2}
-							style={{ margin: 0, fontWeight: 700, color: "#0f172a" }}
-						>
+						<Title level={2} className="!m-0 font-bold text-slate-900">
 							Fly Fairly
 						</Title>
 					</div>
-					<Text style={{ color: "#64748b", fontSize: "1.1rem" }}>
+					<Text className="text-slate-500 text-lg">
 						Intelligent Airport Search
 					</Text>
 				</div>
 
 				{/* Search Box Container */}
-				<div
-					style={{
-						width: "100%",
-						maxWidth: "600px",
-						display: "flex",
-						flexDirection: "column",
-						gap: "1rem",
-					}}
-				>
+				<div className="w-full max-w-[600px] flex flex-col gap-4">
 					<Input
 						size="large"
 						placeholder="Search airports, cities, regions, or IATA codes..."
@@ -125,30 +82,14 @@ const Landing = () => {
 						value={info.query}
 						onChange={handleInputChange}
 						allowClear
-						style={{
-							padding: "12px 20px",
-							borderRadius: "12px",
-							boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-							border: "none",
-							fontSize: "1.1rem",
-						}}
+						className="py-3 px-5 rounded-xl shadow-md border-none text-lg"
 					/>
 
 					{/* Grader / Debug Panel - Shows LLM Intent Routing */}
 					{info.intentData && (
-						<div
-							style={{
-								display: "flex",
-								alignItems: "center",
-								gap: "8px",
-								padding: "12px",
-								backgroundColor: "#eff6ff",
-								borderRadius: "8px",
-								border: "1px solid #bfdbfe",
-							}}
-						>
+						<div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
 							<FaInfoCircle color="#3b82f6" />
-							<Text style={{ color: "#1e3a8a", fontSize: "0.9rem" }}>
+							<Text className="text-blue-900 text-sm">
 								<strong>LLM Intent:</strong>{" "}
 								{info.intentData.intent.toUpperCase()} |
 								<strong> Normalized:</strong> {info.intentData.normalized_query}
@@ -159,31 +100,15 @@ const Landing = () => {
 					)}
 
 					{info.error && (
-						<Text
-							type="danger"
-							style={{ textAlign: "center", marginTop: "1rem" }}
-						>
+						<Text type="danger" className="text-center mt-4">
 							{info.error}
 						</Text>
 					)}
 
 					{/* Results Area */}
-					<div
-						style={{
-							display: "flex",
-							flexDirection: "column",
-							gap: "12px",
-							marginTop: "1rem",
-						}}
-					>
+					<div className="flex flex-col gap-3 mt-4">
 						{info.loading && (
-							<div
-								style={{
-									display: "flex",
-									justifyContent: "center",
-									padding: "2rem",
-								}}
-							>
+							<div className="flex justify-center p-8">
 								<Spin size="large" />
 							</div>
 						)}
@@ -198,43 +123,15 @@ const Landing = () => {
 							info.results.map((airport) => (
 								<Card
 									key={airport._id || airport.ident}
-									bodyStyle={{ padding: "16px" }}
-									style={{
-										borderRadius: "10px",
-										border: "1px solid #e2e8f0",
-										boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
-									}}
+									style={{ body: { padding: "16px" } }}
+									className="rounded-xl border border-slate-200 shadow-sm"
 									hoverable
 								>
-									<div
-										style={{
-											display: "flex",
-											justifyContent: "space-between",
-											alignItems: "flex-start",
-										}}
-									>
+									<div className="flex justify-between items-start">
 										{/* Left Side: Name and Location */}
-										<div
-											style={{
-												display: "flex",
-												flexDirection: "column",
-												gap: "4px",
-											}}
-										>
-											<div
-												style={{
-													display: "flex",
-													alignItems: "center",
-													gap: "8px",
-												}}
-											>
-												<Text
-													style={{
-														fontWeight: 600,
-														fontSize: "1.1rem",
-														color: "#0f172a",
-													}}
-												>
+										<div className="flex flex-col gap-1">
+											<div className="flex items-center gap-2">
+												<Text className="font-semibold text-lg text-slate-900">
 													{airport.name}
 												</Text>
 												{airport.tier === 1 && (
@@ -243,31 +140,12 @@ const Landing = () => {
 												{airport.tier === 2 && <Tag color="cyan">Regional</Tag>}
 											</div>
 
-											<div
-												style={{
-													display: "flex",
-													alignItems: "center",
-													gap: "16px",
-													color: "#64748b",
-												}}
-											>
-												<span
-													style={{
-														display: "flex",
-														alignItems: "center",
-														gap: "4px",
-													}}
-												>
+											<div className="flex items-center gap-4 text-slate-500">
+												<span className="flex items-center gap-1">
 													<FaMapMarkerAlt size={12} />
 													{airport.municipality}, {airport.iso_region}
 												</span>
-												<span
-													style={{
-														display: "flex",
-														alignItems: "center",
-														gap: "4px",
-													}}
-												>
+												<span className="flex items-center gap-1">
 													<FaGlobeAmericas size={12} />
 													{airport.iso_country}
 												</span>
@@ -275,32 +153,11 @@ const Landing = () => {
 										</div>
 
 										{/* Right Side: IATA Code */}
-										<div
-											style={{
-												backgroundColor: "#f1f5f9",
-												padding: "8px 12px",
-												borderRadius: "6px",
-												display: "flex",
-												flexDirection: "column",
-												alignItems: "center",
-											}}
-										>
-											<Text
-												style={{
-													fontWeight: 800,
-													fontSize: "1.2rem",
-													color: "#334155",
-												}}
-											>
+										<div className="bg-slate-100 px-3 py-2 rounded-md flex flex-col items-center">
+											<Text className="font-extrabold text-xl text-slate-700">
 												{airport.iata_code || "N/A"}
 											</Text>
-											<Text
-												style={{
-													fontSize: "0.7rem",
-													color: "#94a3b8",
-													fontWeight: 600,
-												}}
-											>
+											<Text className="text-xs text-slate-400 font-semibold">
 												IATA
 											</Text>
 										</div>
@@ -309,8 +166,8 @@ const Landing = () => {
 							))}
 					</div>
 				</div>
-			</Content>
-		</Layout>
+			</div>
+		</div>
 	);
 };
 
