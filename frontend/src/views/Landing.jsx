@@ -55,8 +55,6 @@ const Landing = () => {
 		setInfo((prev) => ({ ...prev, query: e.target.value }));
 	};
 
-	
-
 	return (
 		<div className="min-h-screen bg-slate-50">
 			<div className="flex flex-col items-center py-16 px-4 w-full">
@@ -84,20 +82,6 @@ const Landing = () => {
 						allowClear
 						className="py-3 px-5 rounded-xl shadow-md border-none text-lg"
 					/>
-
-					{/* Grader / Debug Panel - Shows LLM Intent Routing */}
-					{info.intentData && (
-						<div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-							<FaInfoCircle color="#3b82f6" />
-							<Text className="text-blue-900 text-sm">
-								<strong>LLM Intent:</strong>{" "}
-								{info.intentData.intent.toUpperCase()} |
-								<strong> Normalized:</strong> {info.intentData.normalized_query}
-								{info.intentData.region_code &&
-									` | Region: ${info.intentData.region_code}`}
-							</Text>
-						</div>
-					)}
 
 					{info.error && (
 						<Text type="danger" className="text-center mt-4">
