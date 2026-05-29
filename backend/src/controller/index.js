@@ -128,6 +128,7 @@ export const searchAirportsController = async (req, res) => {
 		}
 		const intentData = await parseSearchIntent(query);
 
+        console.log("Parsed Intent Data:", intentData);
 		let mongoQuery = {};
 		if (intentData.intent === "iata") {
 			mongoQuery = {
@@ -161,11 +162,57 @@ export const searchAirportsController = async (req, res) => {
 			};
 		}
 
-		const results = await Airport.find(mongoQuery)
-			.sort({ tier: 1 })
-			.limit(10)
-			.select("-__v -createdAt -updatedAt")
-			.lean();
+		const results = await Airport.aggregate([
+			{ $match: mongoQuery },
+			{
+				$addFields: {
+					relevanceScore: {
+						$switch: {
+							branches: [
+								// Exact municipality match → highest priority
+								{
+									case: {
+										$regexMatch: {
+											input: "$municipality",
+											regex: `^${intentData.normalized_query}$`,
+											options: "i",
+										},
+									},
+									then: 0,
+								},
+								// Municipality starts with query
+								{
+									case: {
+										$regexMatch: {
+											input: "$municipality",
+											regex: `^${intentData.normalized_query}`,
+											options: "i",
+										},
+									},
+									then: 1,
+								},
+								// Name contains query
+								{
+									case: {
+										$regexMatch: {
+											input: "$name",
+											regex: intentData.normalized_query,
+											options: "i",
+										},
+									},
+									then: 2,
+								},
+							],
+							default: 3,
+						},
+					},
+				},
+			},
+			// Sort: relevance first, then tier (so Patna exact > BBI tier-1)
+			{ $sort: { relevanceScore: 1, tier: 1 } },
+			{ $limit: 10 },
+			{ $project: { __v: 0, createdAt: 0, updatedAt: 0 } },
+		]);
 
 		return res.status(200).json({
 			success: true,

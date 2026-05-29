@@ -18,7 +18,7 @@ const SearchIntentSchema = z.object({
 
 export const parseSearchIntent = async (rawQuery) => {
 	const { object } = await generateObject({
-		model: google("gemini-3-flash-preview"),
+		model: google("gemini-2.5-flash"),
 		schema: SearchIntentSchema,
 		prompt: `
             You are a travel search query parser. 
