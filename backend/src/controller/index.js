@@ -3,27 +3,22 @@ import path, { dirname } from "path";
 import { fileURLToPath } from "url";
 import csv from "csv-parser";
 import db from "../model/index.js";
+import { parseSearchIntent } from "../helper/index.js";
 
 const { Airport } = db;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 export const seedAirportDataController = async (req, res) => {
 	try {
+		const __filename = fileURLToPath(import.meta.url);
+		const __dirname = dirname(__filename);
 		const csvFilePath = path.join(__dirname, "../data/airports.csv");
 
-		
 		await Airport.deleteMany({});
-		
 
 		const batchSize = 2000;
 		let batch = [];
 		let totalInserted = 0;
 
-		
-
-		
 		await new Promise((resolve, reject) => {
 			fs.createReadStream(csvFilePath)
 				.pipe(csv())
@@ -121,6 +116,67 @@ export const seedAirportDataController = async (req, res) => {
 		return res.status(500).json({
 			success: false,
 			error: "Failed to seed airports data",
+			details: error.message,
+		});
+	}
+};
+export const searchAirportsController = async (req, res) => {
+	try {
+		const { query } = req.query;
+		if (!query || query.length < 2) {
+			return res.status(200).json({ success: true, intent: null, results: [] });
+		}
+		const intentData = await parseSearchIntent(query);
+
+		let mongoQuery = {};
+		if (intentData.intent === "iata") {
+			mongoQuery = {
+				$or: [
+					{ iata_code: intentData.normalized_query },
+
+					{
+						municipality: {
+							$regex: `^${intentData.normalized_query}`,
+							$options: "i",
+						},
+					},
+				],
+			};
+		} else if (intentData.intent === "region" && intentData.region_code) {
+			// Handles "Hawaii" -> Returns HNL, OGG, etc.
+			mongoQuery = { iso_region: intentData.region_code };
+		} else {
+			// Direct match or fallback regex match on normalized query text
+			mongoQuery = {
+				$or: [
+					{
+						municipality: {
+							$regex: `^${intentData.normalized_query}$`,
+							$options: "i",
+						},
+					},
+					{ name: { $regex: intentData.normalized_query, $options: "i" } },
+					{ aliases: { $regex: intentData.normalized_query, $options: "i" } },
+				],
+			};
+		}
+
+		const results = await Airport.find(mongoQuery)
+			.sort({ tier: 1 })
+			.limit(10)
+			.select("-__v -createdAt -updatedAt")
+			.lean();
+
+		return res.status(200).json({
+			success: true,
+			intent: intentData,
+			results: results,
+		});
+	} catch (error) {
+		console.error("Search API Error:", error);
+		return res.status(500).json({
+			success: false,
+			error: "Failed to execute search",
 			details: error.message,
 		});
 	}

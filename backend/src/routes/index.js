@@ -1,6 +1,9 @@
 import express from "express";
-import { seedAirportDataController } from "../controller/index.js";
+import {
+	searchAirportsController,
+	seedAirportDataController,
+} from "../controller/index.js";
 const router = express.Router();
 router.post("/seed", seedAirportDataController);
-router.get("/search",)
+router.get("/search", searchAirportsController);
 export default router;
