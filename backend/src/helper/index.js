@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { google } from "@ai-sdk/google";
+
 import { generateObject } from "ai";
+import { azure } from "@ai-sdk/azure";
+// import azure from "../config/azure.js";
 const SearchIntentSchema = z.object({
 	intent: z.enum(["iata", "city", "region", "country", "unknown"]),
 	normalized_query: z
@@ -10,7 +13,7 @@ const SearchIntentSchema = z.object({
 		),
 	region_code: z
 		.string()
-		.optional()
+		.nullable()
 		.describe(
 			"If intent is region/state, guess the ISO region code (e.g. Hawaii -> US-HI)"
 		),
@@ -24,7 +27,8 @@ export const parseSearchIntent = async (rawQuery) => {
 			return intentCache.get(cacheKey);
 		}
 		const { object } = await generateObject({
-			model: google("gemini-2.5-flash"),
+			model: azure("gpt-4o-mini"),
+			// model: google("gemini-2.5-pro"),
 			schema: SearchIntentSchema,
 			prompt: `
             You are a travel search query parser. 
@@ -61,7 +65,7 @@ export const buildMatchQuery = (intentData) => {
 		case "iata":
 			return {
 				$or: [
-					{ iata_code: normalized_query },
+					{ iata_code: normalized_query.toUpperCase() },
 					{ municipality: { $regex: `^${normalized_query}`, $options: "i" } },
 				],
 			};
@@ -69,15 +73,20 @@ export const buildMatchQuery = (intentData) => {
 			if (region_code) {
 				return { iso_region: region_code };
 			}
-
 			break;
+		case "city":
+			return {
+				$or: [
+					{ municipality: { $regex: `^${normalized_query}$`, $options: "i" } },
+					{ $text: { $search: normalized_query } },
+				],
+			};
 	}
-
 	return {
 		$or: [
-			{ municipality: { $regex: `^${normalized_query}$`, $options: "i" } },
-			{ name: { $regex: normalized_query, $options: "i" } },
-			{ aliases: { $regex: normalized_query, $options: "i" } },
+			{ municipality: { $regex: `^${normalized_query}`, $options: "i" } },
+			{ iata_code: normalized_query.toUpperCase() },
+			{ $text: { $search: normalized_query } },
 		],
 	};
 };

@@ -11,6 +11,7 @@
 		"start": "node --import ./env.js index.js"
 	},
 	"dependencies": {
+		"@ai-sdk/azure": "^3.0.68",
 		"@ai-sdk/google": "^3.0.80",
 		"ai": "^6.0.193",
 		"cors": "^2.8.6",
