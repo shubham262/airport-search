@@ -13,17 +13,17 @@ export const seedAirportDataController = async (req, res) => {
 	try {
 		const csvFilePath = path.join(__dirname, "../data/airports.csv");
 
-		// 1. Wipe existing data to prevent duplicates on re-runs
+		
 		await Airport.deleteMany({});
-		console.log("Cleared existing airport data.");
+		
 
 		const batchSize = 2000;
 		let batch = [];
 		let totalInserted = 0;
 
-		console.log("Starting CSV stream and ingestion...");
+		
 
-		// 2. Wrap the stream in a Promise to use cleanly inside the async controller
+		
 		await new Promise((resolve, reject) => {
 			fs.createReadStream(csvFilePath)
 				.pipe(csv())
